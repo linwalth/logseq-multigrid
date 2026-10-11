@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" font-family="monospace" font-size="13">
+  <rect width="720" height="380" rx="8" fill="#0d1117"/>
+
+  <!-- Frame 1: Canvas overview (0-3s) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="1;1;0;0;0;0;0;0;1" dur="12s" repeatCount="indefinite" keyTimes="0;0.24;0.25;0.49;0.5;0.74;0.75;0.99;1"/>
+    <text x="20" y="28" fill="#58a6ff" font-weight="bold" font-size="14">MULTIGRID CANVAS</text>
+    <rect x="20" y="40" width="680" height="310" rx="4" fill="none" stroke="#30363d" stroke-width="1"/>
+    <rect x="40" y="60" width="130" height="100" rx="4" fill="#161b22" stroke="#f78166" stroke-width="1.5"/>
+    <text x="75" y="115" fill="#f78166" font-size="22">IMG</text>
+    <text x="55" y="145" fill="#8b949e">image card</text>
+    <rect x="200" y="60" width="160" height="100" rx="4" fill="#161b22" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="240" y="100" fill="#a371f7" font-size="20">PDF</text>
+    <text x="215" y="130" fill="#8b949e">viewer (scroll)</text>
+    <rect x="400" y="60" width="180" height="100" rx="4" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
+    <text x="445" y="95" fill="#7ee787" font-size="18">XLSX</text>
+    <text x="415" y="120" fill="#8b949e">sheet (editable)</text>
+    <rect x="40" y="190" width="130" height="90" rx="4" fill="#161b22" stroke="#ff7b72" stroke-width="1.5"/>
+    <text x="70" y="235" fill="#ff7b72" font-size="18">&#9654;YT</text>
+    <text x="55" y="260" fill="#8b949e">YouTube</text>
+    <circle cx="694" cy="348" r="6" fill="none" stroke="#d29922" stroke-width="1.5">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <text x="640" y="352" fill="#d29922" font-size="10">resize &#9662;</text>
+    <text x="250" y="355" fill="#484f58" font-size="10">drag - resize - lock - group - right-click</text>
+  </g>
+
+  <!-- Frame 2: Dragging (3-6s) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0;0;0;0" dur="12s" repeatCount="indefinite" keyTimes="0;0.24;0.25;0.49;0.5;0.74;0.75;0.99;1"/>
+    <text x="20" y="28" fill="#58a6ff" font-weight="bold" font-size="14">DRAG CARDS FREELY</text>
+    <rect x="20" y="40" width="680" height="310" rx="4" fill="none" stroke="#30363d" stroke-width="1"/>
+    <rect x="40" y="60" width="130" height="100" rx="4" fill="#161b22" stroke="#f78166" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0,0;140,60;140,60" dur="3s" begin="3s" repeatCount="indefinite"/>
+      <rect x="40" y="60" width="130" height="100" rx="4" fill="#21262d" stroke="#f78166" stroke-width="2" opacity="0.9"/>
+      <text x="75" y="115" fill="#f78166" font-size="22">IMG</text>
+      <text x="55" y="145" fill="#8b949e">dragging...</text>
+    </g>
+    <rect x="200" y="60" width="160" height="100" rx="4" fill="#161b22" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="240" y="100" fill="#a371f7" font-size="20">PDF</text>
+    <text x="215" y="130" fill="#8b949e">viewer</text>
+    <rect x="400" y="60" width="180" height="100" rx="4" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
+    <text x="445" y="95" fill="#7ee787" font-size="18">XLSX</text>
+    <text x="415" y="120" fill="#8b949e">sheet</text>
+    <text x="250" y="355" fill="#484f58" font-size="10">snap to 8px grid - multi-select - lasso</text>
+  </g>
+
+  <!-- Frame 3: Sheet editing (6-9s) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;0;1;1;0;0;0" dur="12s" repeatCount="indefinite" keyTimes="0;0.24;0.25;0.49;0.5;0.74;0.75;0.99;1"/>
+    <text x="20" y="28" fill="#58a6ff" font-weight="bold" font-size="14">EDITABLE SHEETS</text>
+    <rect x="20" y="40" width="680" height="310" rx="4" fill="none" stroke="#30363d" stroke-width="1"/>
+    <rect x="80" y="70" width="520" height="240" rx="4" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
+    <rect x="80" y="70" width="520" height="28" fill="#21262d"/>
+    <text x="95" y="88" fill="#7ee787" font-size="11">A</text><text x="165" y="88" fill="#7ee787" font-size="11">B</text><text x="235" y="88" fill="#7ee787" font-size="11">C</text><text x="305" y="88" fill="#7ee787" font-size="11">D</text><text x="375" y="88" fill="#7ee787" font-size="11">E</text>
+    <line x1="150" y1="70" x2="150" y2="310" stroke="#30363d"/><line x1="220" y1="70" x2="220" y2="310" stroke="#30363d"/><line x1="290" y1="70" x2="290" y2="310" stroke="#30363d"/><line x1="360" y1="70" x2="360" y2="310" stroke="#30363d"/>
+    <line x1="80" y1="98" x2="600" y2="98" stroke="#30363d"/><line x1="80" y1="130" x2="600" y2="130" stroke="#30363d"/><line x1="80" y1="162" x2="600" y2="162" stroke="#30363d"/><line x1="80" y1="194" x2="600" y2="194" stroke="#30363d"/><line x1="80" y1="226" x2="600" y2="226" stroke="#30363d"/><line x1="80" y1="258" x2="600" y2="258" stroke="#30363d"/>
+    <text x="95" y="118" fill="#c9d1d9">HP</text><text x="165" y="118" fill="#c9d1d9">AC</text><text x="235" y="118" fill="#c9d1d9">Speed</text>
+    <text x="95" y="150" fill="#c9d1d9">45</text><text x="165" y="150" fill="#c9d1d9">18</text><text x="235" y="150" fill="#c9d1d9">30 ft</text>
+    <text x="95" y="182" fill="#c9d1d9">30</text><text x="165" y="182" fill="#c9d1d9">14</text><text x="235" y="182" fill="#c9d1d9">25 ft</text>
+    <rect x="80" y="98" width="140" height="64" fill="none" stroke="#58a6ff" stroke-width="2" opacity="0.8"/>
+    <rect x="290" y="98" width="70" height="32" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+    <text x="298" y="118" fill="#7ee787">=SUM(B2:B3)</text>
+    <text x="298" y="140" fill="#484f58" font-size="9">-&gt; 32</text>
+    <text x="250" y="355" fill="#484f58" font-size="10">formulas - undo/redo - ctrl+c range - paste matrix</text>
+  </g>
+
+  <!-- Frame 4: Grouped tabs (9-12s) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;0;0;0;1;1;0" dur="12s" repeatCount="indefinite" keyTimes="0;0.24;0.25;0.49;0.5;0.74;0.75;0.99;1"/>
+    <text x="20" y="28" fill="#58a6ff" font-weight="bold" font-size="14">GROUP INTO TABS</text>
+    <rect x="20" y="40" width="680" height="310" rx="4" fill="none" stroke="#30363d" stroke-width="1"/>
+    <rect x="60" y="65" width="80" height="24" rx="4" fill="#21262d" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="75" y="82" fill="#a371f7" font-size="11">PDF 1</text>
+    <rect x="142" y="65" width="80" height="24" rx="4" fill="#161b22" stroke="#30363d"/>
+    <text x="157" y="82" fill="#8b949e" font-size="11">PDF 2</text>
+    <rect x="224" y="65" width="80" height="24" rx="4" fill="#161b22" stroke="#30363d"/>
+    <text x="239" y="82" fill="#8b949e" font-size="11">PDF 3</text>
+    <rect x="60" y="89" width="400" height="220" rx="4" fill="#161b22" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="80" y="140" fill="#a371f7" font-size="40">PDF</text>
+    <text x="80" y="170" fill="#8b949e" font-size="11">Page 1 of 12</text>
+    <rect x="80" y="185" width="360" height="100" rx="2" fill="#0d1117" stroke="#30363d"/>
+    <text x="95" y="205" fill="#484f58" font-size="9">Lorem ipsum dolor sit amet,</text>
+    <text x="95" y="220" fill="#484f58" font-size="9">consectetur adipiscing elit.</text>
+    <text x="95" y="235" fill="#484f58" font-size="9">Scroll for more...</text>
+    <text x="500" y="200" fill="#a371f7" font-size="20">&lt;-&gt;</text>
+    <text x="490" y="225" fill="#484f58" font-size="9">switch tabs</text>
+    <rect x="500" y="100" width="170" height="50" rx="4" fill="#21262d" stroke="#d29922" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="515" y="120" fill="#d29922" font-size="10">select 2+ cards</text>
+    <text x="515" y="137" fill="#d29922" font-size="10">-&gt; merge into tabs</text>
+    <text x="250" y="355" fill="#484f58" font-size="10">merge/split PDFs - images - sheets (only selected, not all)</text>
+  </g>
+</svg>

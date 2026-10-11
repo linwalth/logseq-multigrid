@@ -1,0 +1,11 @@
+{
+  "name": "logseq-multigrid",
+  "version": "0.1.15",
+  "private": true,
+  "main": "index.js",
+  "logseq": {
+    "id": "logseq-multigrid",
+    "title": "Logseq Multigrid",
+    "icon": "./icon.png"
+  }
+}

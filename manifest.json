@@ -1,0 +1,10 @@
+{
+  "id": "logseq-multigrid",
+  "title": "Logseq Multigrid",
+  "description": "Image corkboard canvas, PDF viewer cards, editable XLSX/CSV sheet cards, YouTube embeds — all on a draggable canvas inside Logseq blocks.",
+  "version": "0.1.15",
+  "effect": true,
+  "theme": false,
+  "main": "index.js",
+  "icon": "icon.png"
+}
