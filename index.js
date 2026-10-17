@@ -5038,21 +5038,11 @@ function main() {
       deleteCards(sel);
     }
   }, true);
+  // Escape always clears the Multigrid selection, in every context. The event
+  // is never swallowed, so Logseq (and menus, the lightbox, sheet cells) keep
+  // their own Escape handling; we only clear our selection as it propagates.
   top.window.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape' && e.keyCode !== 27) return;
-    if (isEditing()) return;
-    // Menus/prompts and the lightbox own Escape in their own handlers; a sheet
-    // cell/range selection clears itself via sheetSelKeyDoc. Never swallow those.
-    if (td().querySelector('.mg-menu,.mg-ask,.mg-ask-shield')) return;
-    if (LB.box && LB.box.style.display !== 'none') return;
-    var tg = e.target;
-    // Sheet focus alone must not block the deselect: sheetSelKeyDoc only clears
-    // a range when the event target is inside the sheet, which the check below
-    // already covers. A stale MG.sheetFocus would otherwise swallow Escape.
-    if (tg && tg.closest && tg.closest('.mg-sheet,.mg-sheet-edit,.mg-tbo-edit')) return;
-    if (!MG.sel.size && !MG.cvSel) return;
-    // Do not swallow the event: Logseq keeps its own Escape handling, we only
-    // additionally clear our selection as it propagates.
+    if ((e.key !== 'Escape' && e.keyCode !== 27) || (!MG.sel.size && !MG.cvSel)) return;
     deselectAll(); clearCvSel();
   }, true);
   tblEditingGuard();
