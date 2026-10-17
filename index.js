@@ -193,6 +193,8 @@ body div[id="__app"] .ls-block table thead th{border-bottom:2px solid var(--mg-a
 .mg-sheet table th.mg-sheet-hrow,.mg-sheet table .mg-sheet-hrow th{background:var(--ls-tertiary-background-color,rgba(128,128,128,.12))!important;color:var(--ls-title-text-color,var(--ls-primary-text-color,#333))!important;font-weight:600;text-align:center;position:sticky;top:0;z-index:3}
 .mg-sheet table th.mg-sheet-rh{background:var(--ls-tertiary-background-color,rgba(128,128,128,.12))!important;color:var(--ls-primary-text-color,#333)!important;font-weight:600;text-align:center;font-size:0.92em;position:sticky;left:0;z-index:2}
 .mg-sheet table th.mg-sheet-corner{background:var(--ls-tertiary-background-color,rgba(128,128,128,.15))!important;position:sticky;top:0;left:0;z-index:4}
+.mg-sheet table .mg-sheet-hdr th{background:var(--ls-tertiary-background-color,rgba(128,128,128,.12))!important;color:var(--ls-title-text-color,var(--ls-primary-text-color,#333))!important;font-weight:600!important;position:sticky;top:0;z-index:2}
+.mg-sheet table .mg-sheet-hrow ~ .mg-sheet-hdr th{top:27px}
 .mg-sheet table{width:100%;border-collapse:separate;border-spacing:0;margin:0;color:var(--ls-primary-text-color,#333);font-size:var(--mg-sheet-fs,13px)}
 .mg-sheet table td,.mg-sheet table th{border:none!important;border-bottom:1px solid var(--ls-border-color,rgba(128,128,128,.2))!important;border-right:1px solid var(--ls-border-color,rgba(128,128,128,.15))!important;padding:5px 9px!important;text-align:left;vertical-align:top;white-space:pre-wrap;min-width:40px;outline:none}
 .mg-sheet table tr>:last-child{border-right:none!important}
@@ -1598,6 +1600,7 @@ async function sheetLoadCard(st) {
     var wb = X.read(bytes, { type: 'array', cellNF: true, cellStyles: true, cellFormula: true, cellText: true });
     if (s.destroyed || !s.wrap.isConnected) return;
     s.wb = wb; s.name = (wb.Sheets[name] ? name : wb.SheetNames[0]);
+    try { var hb = st.uuid ? await getBlock(st.uuid) : null; var hraw = hb ? getProp(hb.content || '', 'mg-sheet-hdr') : null; s.hdr = hraw ? JSON.parse(b64dec(String(hraw).trim()) || '{}') : null; } catch (eH) { s.hdr = null; }
     sheetRender(st);
   } catch (e) { console.error('[mg] sheet load:', (e && (e.message || e)) || e); sheetFallback(st); }
   finally { s.loading = false; }
@@ -1656,6 +1659,7 @@ function sheetRender(st) {
   wrap.classList.remove('mg-sheet-fallback');
   if (!ws) { sheetFallback(st); return; }
   s.name = name;
+  var hdr = (s.hdr && s.hdr[name]) || null;
   wrap.appendChild(sheetHead(st, wb, name));
   var calc = s.calc = sheetCalcValues(st) || {};
   var ref = X.utils.decode_range(ws['!ref'] || 'A1');
@@ -1674,6 +1678,12 @@ function sheetRender(st) {
     for (var hc = C0; hc <= C1; hc++) { var hth = td().createElement('th'); hth.textContent = colLetters(hc); hrow.appendChild(hth); }
     tbody.appendChild(hrow);
   }
+  if (hdr && hdr.length) {
+    var hrw = td().createElement('tr'); hrw.className = 'mg-sheet-hdr';
+    if (s.headers) { var hrz = td().createElement('th'); hrz.className = 'mg-sheet-rh'; hrw.appendChild(hrz); }
+    for (var hcc = C0; hcc <= C1; hcc++) { var hcell = td().createElement('th'); hcell.textContent = hdr[hcc - C0] != null ? String(hdr[hcc - C0]) : ''; hrw.appendChild(hcell); }
+    tbody.appendChild(hrw);
+  }
   for (var r = R0; r <= R1; r++) {
     var tr = td().createElement('tr');
     if (s.headers) { var rh = td().createElement('th'); rh.className = 'mg-sheet-rh'; rh.textContent = String(r + 1); tr.appendChild(rh); }
@@ -1683,7 +1693,7 @@ function sheetRender(st) {
       var a = a1addr(r, c), cellVal = ws[a];
       el.textContent = (cellVal && cellVal.f != null && calc[a] !== undefined) ? String(calc[a]) : sheetCellText(cellVal);
       el.dataset.addr = a;
-      if (r === R0) el.classList.add('mg-sheet-h');
+      if (r === R0 && !hdr) el.classList.add('mg-sheet-h');
       var anc = anchor[r + '_' + c];
       if (anc) { if (anc.cs > 1) el.colSpan = anc.cs; if (anc.rs > 1) el.rowSpan = anc.rs; }
       sheetWireCell(st, el);
@@ -2476,10 +2486,12 @@ function sheetRecalc(st) {
   var vals = sheetCalcValues(st); if (!vals) return;
   s.calc = vals;
   var ws = sheetWS(st);
+  var edits = s.edits || {};
   Array.prototype.forEach.call(s.wrap.querySelectorAll('td[data-addr]'), function (el) {
     if (el.isContentEditable || el.classList.contains('mg-sheet-edit')) return;
-    var a = el.dataset.addr, cell = ws[a];
-    if (cell && cell.f != null && vals[a] !== undefined) { var tv = String(vals[a]); if (el.textContent !== tv) el.textContent = tv; }
+    var a = el.dataset.addr, cell = ws[a], edt = edits[a];
+    var isF = (cell && cell.f != null) || (edt != null && String(edt).charAt(0) === '=');
+    if (isF && vals[a] !== undefined) { var tv = String(vals[a]); if (el.textContent !== tv) el.textContent = tv; }
   });
 }
 async function sheetRestoreMd(st) {
@@ -2493,6 +2505,7 @@ async function sheetRestoreMd(st) {
   var nc = content;
   if (target) nc = nc.replace(target.exact, orig); else nc = nc + '\n' + orig;
   nc = setPropStr(nc, 'mg-mdsrc', null);
+  nc = setPropStr(nc, 'mg-sheet-hdr', null);
   await upd(st.uuid, nc);
   toast(t('restore_md'));
   schedScan();
@@ -2548,7 +2561,8 @@ async function migrateTableToSheet(uuid, ov) {
   if (!(await askConfirm(t('migrate_q')))) return;
   var X = await loadXlsx(); if (!X) { toast(t('sheet_savefail') + 'SheetJS'); return; }
   try {
-    var matrix = []; if (p.header) matrix.push(p.header.slice()); p.rows.forEach(function (r) { matrix.push(r.slice()); });
+    var hdrRow = p.header ? p.header.slice() : null;
+    var matrix = []; p.rows.forEach(function (r) { matrix.push(r.slice()); });
     if (!matrix.length) matrix = [['']];
     var wb = X.utils.book_new();
     var ws = X.utils.aoa_to_sheet(matrix);
@@ -2564,6 +2578,7 @@ async function migrateTableToSheet(uuid, ov) {
     var link = (p.indent || '') + '[' + nm + '](../assets/' + nm + ')';
     var nc = lines.slice(0, p.start).concat([link]).concat(lines.slice(p.end + 1)).join('\n');
     nc = setPropStr(nc, 'mg-mdsrc', b64enc(orig));
+    if (hdrRow) nc = setPropStr(nc, 'mg-sheet-hdr', b64enc(JSON.stringify({ 'Tabelle': hdrRow })));
     await upd(uuid, nc);
     toast(t('migrate_toast'));
     schedScan();
