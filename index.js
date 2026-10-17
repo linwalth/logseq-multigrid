@@ -21,9 +21,11 @@ var LANG = (function () { try { var l = (navigator.language || navigator.userLan
 var STR = {
   de: {
     card_reset: 'Karte zurücksetzen', ar_lock_card: 'Seitenverhältnis Karte sperren', ar_unlock_card: 'Seitenverhältnis Karte entsperren',
+    ar_lock_cards: 'Seitenverhältnis Karten sperren', ar_unlock_cards: 'Seitenverhältnis Karten entsperren',
     finder: 'Im Finder zeigen', del: 'Löschen', group_tile: 'Zu Kachel zusammenfassen', card_minimize: 'Karte minimieren', card_maximize: 'Karte maximieren',
     layer_up: 'Ebene vor', layer_down: 'Ebene zurück', layer_front: 'Ganz nach vorne', layer_back: 'Ganz nach hinten',
     pos_lock: 'Position Karte sperren', pos_unlock: 'Position Karte entsperren', size_lock: 'Größe Karte sperren', size_unlock: 'Größe Karte entsperren',
+    pos_lock_p: 'Position Karten sperren', size_lock_p: 'Größe Karten sperren',
     lock_all: 'Alles sperren', unlock_all: 'Alles entsperren', reset_all: 'Alles zurücksetzen',
     ar_lock_canvas: 'Seitenverhältnis Canvas sperren', ar_unlock_canvas: 'Seitenverhältnis Canvas entsperren',
     frame_reset: 'Canvas zurücksetzen', cards_reset: 'Karten zurücksetzen', cards_shrink: 'Karten minimieren', cards_fill: 'Karten maximieren',
@@ -45,9 +47,11 @@ var STR = {
   },
   en: {
     card_reset: 'Reset card', ar_lock_card: 'Lock card aspect ratio', ar_unlock_card: 'Unlock card aspect ratio',
+    ar_lock_cards: 'Lock aspect ratio cards', ar_unlock_cards: 'Unlock aspect ratio cards',
     finder: 'Show in Finder', del: 'Delete', group_tile: 'Merge into tile', card_minimize: 'Minimize card', card_maximize: 'Maximize card',
     layer_up: 'Layer forward', layer_down: 'Layer backward', layer_front: 'Bring to front', layer_back: 'Send to back',
     pos_lock: 'Lock card position', pos_unlock: 'Unlock card position', size_lock: 'Lock card size', size_unlock: 'Unlock card size',
+    pos_lock_p: 'Lock cards position', size_lock_p: 'Lock cards size',
     lock_all: 'Lock all', unlock_all: 'Unlock all', reset_all: 'Reset all',
     ar_lock_canvas: 'Lock canvas aspect ratio', ar_unlock_canvas: 'Unlock canvas aspect ratio',
     frame_reset: 'Reset canvas', cards_reset: 'Reset cards', cards_shrink: 'Minimize cards', cards_fill: 'Maximize cards',
@@ -359,8 +363,8 @@ function unsetImageLock(st) { setImageState(st, function (o) { o.pos = false; o.
 function lockMenuItems(st, arr, each) {
   if (arr && arr.length > 1) {
     return [
-      [t('pos_lock'), function () { each(function (c) { setImageLock(c, true, c.lockSize); }); }],
-      [t('size_lock'), function () { each(function (c) { setImageLock(c, c.lockPos, true); }); }],
+      [t('pos_lock_p'), function () { each(function (c) { setImageLock(c, true, c.lockSize); }); }],
+      [t('size_lock_p'), function () { each(function (c) { setImageLock(c, c.lockPos, true); }); }],
       [t('lock_all'), function () { each(function (c) { setImageLock(c, true, true); }); }],
       [t('unlock_all'), function () { each(unsetImageLock); }]
     ];
@@ -3363,9 +3367,13 @@ function openLightbox(cv, st) {
       else if (ev.key === 'ArrowRight') { ev.preventDefault(); lightboxNav(1); }
       else if (ev.key === 'ArrowLeft') { ev.preventDefault(); lightboxNav(-1); }
     };
-    d.addEventListener('keydown', kl, true);
-    LB.killKeys = kl;
+    LB.keyHandler = kl;
   }
+  // (Re)attach on every open: closeLightbox() removes the listener, so without
+  // this the second and later lightbox sessions would ignore Escape/arrows.
+  if (LB.killKeys) d.removeEventListener('keydown', LB.killKeys, true);
+  LB.killKeys = LB.keyHandler;
+  d.addEventListener('keydown', LB.killKeys, true);
   LB.cards = cards.map(function (c) { return { st: c }; });
   LB.box.style.display = 'flex';
   lightboxShow(Math.max(0, cards.indexOf(st)));
@@ -4233,10 +4241,11 @@ async function openVideoCard(st) {
 function menuItems(st) {
   var cv = st.cv;
   var arr = (MG.sel.size > 1 && MG.sel.has(st)) ? Array.from(MG.sel) : [st];
+  var many = arr.length > 1;
   function each(fn) { arr.forEach(fn); }
   var M = [
-    [t('card_reset'), function () { each(resetCardSize); }],
-    [st.aspectLock ? t('ar_unlock_card') : t('ar_lock_card'), function () { each(function (c) { c.aspectLock = !c.aspectLock; writeBlock(c.uuid, function (cc) { return refsRewrite(cc, function (r) { if (normSrc(r.src) !== normSrc(c.src)) return null; r.mgm = Object.assign({}, r.mgm, { ar: c.aspectLock }); return r; }); }); }); }],
+    [many ? t('cards_reset') : t('card_reset'), function () { each(resetCardSize); }],
+    [st.aspectLock ? (many ? t('ar_unlock_cards') : t('ar_unlock_card')) : (many ? t('ar_lock_cards') : t('ar_lock_card')), function () { each(function (c) { c.aspectLock = !c.aspectLock; writeBlock(c.uuid, function (cc) { return refsRewrite(cc, function (r) { if (normSrc(r.src) !== normSrc(c.src)) return null; r.mgm = Object.assign({}, r.mgm, { ar: c.aspectLock }); return r; }); }); }); }],
     [t('layer_up'), function () { layerStep(cv, 1, arr); }],
     [t('layer_down'), function () { layerStep(cv, -1, arr); }],
     [t('layer_front'), function () { layerTo(cv, true, arr); }],
@@ -4266,8 +4275,8 @@ function menuItems(st) {
   if (arr.length > 1) M.push([t('group_tile'), function () { groupToTile(cv); }]);
   if (arr.length > 1 && arr.every(function (c) { return c.kind === 'sheet'; })) M.push([t('merge_sheets'), function () { mergeSheets(arr); }]);
   M.push(null);
-  M.push([t('card_minimize'), function () { minimizeCards(cv, arr); }]);
-  M.push([t('card_maximize'), function () { maximizeCards(cv, arr); }]);
+  M.push([many ? t('cards_shrink') : t('card_minimize'), function () { minimizeCards(cv, arr); }]);
+  M.push([many ? t('cards_fill') : t('card_maximize'), function () { maximizeCards(cv, arr); }]);
   M.push(null);
   lockMenuItems(st, arr, each).forEach(function (li) { M.push(li); });
   M.push(null);
@@ -5028,6 +5037,23 @@ function main() {
       e.preventDefault(); e.stopPropagation();
       deleteCards(sel);
     }
+  }, true);
+  top.window.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' && e.keyCode !== 27) return;
+    if (isEditing()) return;
+    // Menus/prompts and the lightbox own Escape in their own handlers; a sheet
+    // cell/range selection clears itself via sheetSelKeyDoc. Never swallow those.
+    if (td().querySelector('.mg-menu,.mg-ask,.mg-ask-shield')) return;
+    if (LB.box && LB.box.style.display !== 'none') return;
+    var tg = e.target;
+    // Sheet focus alone must not block the deselect: sheetSelKeyDoc only clears
+    // a range when the event target is inside the sheet, which the check below
+    // already covers. A stale MG.sheetFocus would otherwise swallow Escape.
+    if (tg && tg.closest && tg.closest('.mg-sheet,.mg-sheet-edit,.mg-tbo-edit')) return;
+    if (!MG.sel.size && !MG.cvSel) return;
+    // Do not swallow the event: Logseq keeps its own Escape handling, we only
+    // additionally clear our selection as it propagates.
+    deselectAll(); clearCvSel();
   }, true);
   tblEditingGuard();
   wireTooltips();
