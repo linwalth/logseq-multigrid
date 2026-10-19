@@ -241,6 +241,7 @@ body div[id="__app"] .ls-block table thead th{border-bottom:2px solid var(--mg-a
 .mg-cv-right{position:absolute;right:0;top:36px;bottom:36px;width:12px;cursor:ew-resize;z-index:101}
 .mg-emptyzone{display:flex;gap:6px;justify-content:center;align-items:center;min-height:60px;border:1px dashed var(--ls-border-color,rgba(128,128,128,.3));border-radius:6px;padding:8px;margin-top:4px;background:rgba(128,128,128,.05)}
 .mg-emptyzone.mg-dropok{border-color:#4a90d9;background:rgba(74,144,217,.08)}
+.mg-emptyzone.mg-drophint{border-color:#4a90d9;background:rgba(74,144,217,.12);box-shadow:0 0 0 2px rgba(74,144,217,.35) inset}
 .mg-tbowrap{position:fixed;z-index:5;pointer-events:none}
 .mg-colh{position:absolute;z-index:6;width:6px;cursor:col-resize;background:var(--mg-accent,#4a90d9);opacity:.25;border-radius:2px;pointer-events:auto;transition:opacity .12s}
 .mg-colh:hover{opacity:.7}
@@ -3426,6 +3427,21 @@ function setupDrag(st) {
     } else {
       startPos = [{ c: st.c, r: st.r, card: st, offC: 0, offR: 0 }];
     }
+    var srcUuid = st.cv && st.cv.dataset ? st.cv.dataset.uuid : null;
+    function dropAt(ev, stage, cv) {
+      var sg = stage.getBoundingClientRect(), cvr = cv.getBoundingClientRect(), gm = gridMetrics(stage);
+      var baseC = Math.round((ev.clientX - grabX - sg.left) / CELL_T) + 1 - anchorOffC;
+      var baseR = Math.round((ev.clientY - grabY - sg.top) / CELL_T) + 1 - anchorOffR;
+      return startPos.map(function (sp) {
+        var card = sp.card, cx = card.spanCx || SPAN_DEFAULT_CX, cy = card.spanCy || SPAN_DEFAULT_CY;
+        var newC = Math.min(Math.max(1, baseC + sp.offC), Math.max(1, gm.cols - cx + 1));
+        var newR = Math.min(Math.max(1, baseR + sp.offR), Math.max(1, gm.rows - cy + 1));
+        return { card: card, c: newC, r: newR, cx: cx, cy: cy,
+          left: (sg.left - cvr.left) + (newC - 1) * CELL_T,
+          top: (sg.top - cvr.top) + (newR - 1) * CELL_T,
+          width: cx * CELL_T - GAP_PX, height: cy * CELL_T - GAP_PX };
+      });
+    }
     function begin() {
       if (st.lockPos) return;
       started = true; st.el.classList.add('mg-drag'); st.el.style.opacity = '0';
@@ -3451,26 +3467,30 @@ function setupDrag(st) {
       if (!started) begin();
       if (!started) return;
       if (ghost) { ghost.style.left = (ev.clientX - grabX) + 'px'; ghost.style.top = (ev.clientY - grabY) + 'px'; }
-      if (st.stage && st.cv) {
-        var sg = st.stage.getBoundingClientRect(), cvr = st.cv.getBoundingClientRect(), gm = gridMetrics(st.stage);
-        var baseC = Math.round((ev.clientX - grabX - sg.left) / CELL_T) + 1 - anchorOffC;
-        var baseR = Math.round((ev.clientY - grabY - sg.top) / CELL_T) + 1 - anchorOffR;
-        startPos.forEach(function (sp, idx) {
-          var sh = shadows[idx]; if (!sh) return;
-          var card = sp.card, cx = card.spanCx || SPAN_DEFAULT_CX, cy = card.spanCy || SPAN_DEFAULT_CY;
-          var newC = Math.min(Math.max(1, baseC + sp.offC), Math.max(1, gm.cols - cx + 1));
-          var newR = Math.min(Math.max(1, baseR + sp.offR), Math.max(1, gm.rows - cy + 1));
-          sh.style.display = '';
-          sh.style.left = ((sg.left - cvr.left) + (newC - 1) * CELL_T) + 'px';
-          sh.style.top = ((sg.top - cvr.top) + (newR - 1) * CELL_T) + 'px';
-          sh.style.width = (cx * CELL_T - GAP_PX) + 'px';
-          sh.style.height = (cy * CELL_T - GAP_PX) + 'px';
-        });
-      }
+      var stack = td().elementsFromPoint ? td().elementsFromPoint(ev.clientX, ev.clientY) : [d.elementFromPoint(ev.clientX, ev.clientY)];
+      var hov = null, hz = null, k;
+      for (k = 0; k < stack.length; k++) { var e2 = stack[k]; if (!e2 || !e2.closest) continue; if (!hov) { var c2 = e2.closest('.mg-canvas'); if (c2) hov = c2; } if (!hz) { var z2 = e2.closest('.mg-emptyzone'); if (z2) hz = z2; } if (hov || hz) break; }
+      function hideSh() { shadows.forEach(function (sh) { if (sh) sh.style.display = 'none'; }); }
+      var hint = (!hov && hz && hz.dataset.mgMacroUuid && hz.dataset.mgMacroUuid !== srcUuid) ? hz : null;
+      d.querySelectorAll('.mg-emptyzone.mg-drophint').forEach(function (z) { if (z !== hint) z.classList.remove('mg-drophint'); });
+      if (hint) hint.classList.add('mg-drophint');
+      if (hint) { hideSh(); return; }
+      var tgtCv = (hov && st.cv && hov !== st.cv) ? hov : st.cv;
+      var tgtStage = tgtCv ? tgtCv.querySelector('.mg-stage') : null;
+      if (!tgtStage) { hideSh(); return; }
+      var places = dropAt(ev, tgtStage, tgtCv);
+      places.forEach(function (p, idx) {
+        var sh = shadows[idx]; if (!sh) return;
+        if (sh.parentNode !== tgtCv) tgtCv.appendChild(sh);
+        sh.style.display = '';
+        sh.style.left = p.left + 'px'; sh.style.top = p.top + 'px';
+        sh.style.width = p.width + 'px'; sh.style.height = p.height + 'px';
+      });
     }
     function up(ev) {
       dragShieldOff();
       d.removeEventListener('mousemove', mv); d.removeEventListener('mouseup', up);
+      d.querySelectorAll('.mg-emptyzone.mg-drophint').forEach(function (z) { z.classList.remove('mg-drophint'); });
       st.el.classList.remove('mg-drag'); st.el.style.opacity = '';
       if (ghost) ghost.remove();
       shadows.forEach(function (sh) { if (sh && sh.parentNode) sh.parentNode.removeChild(sh); });
@@ -3480,9 +3500,12 @@ function setupDrag(st) {
       var stack = td().elementsFromPoint ? td().elementsFromPoint(ev.clientX, ev.clientY) : [d.elementFromPoint(ev.clientX, ev.clientY)];
       var tcv = null, zn = null, k;
       for (k = 0; k < stack.length; k++) { var e2 = stack[k]; if (!e2 || !e2.closest) continue; if (!tcv) { var c2 = e2.closest('.mg-canvas'); if (c2) tcv = c2; } if (!zn) { var z2 = e2.closest('.mg-emptyzone'); if (z2) zn = z2; } if (tcv || zn) break; }
-      var srcUuid = st.cv && st.cv.dataset ? st.cv.dataset.uuid : null;
-      if (tcv && tcv !== st.cv && tcv.dataset.uuid) { crossBlockMove(st, tcv.dataset.uuid); return; }
-      if (zn && zn.dataset.mgMacroUuid && zn.dataset.mgMacroUuid !== srcUuid) { crossBlockMove(st, zn.dataset.mgMacroUuid); return; }
+      if (tcv && tcv !== st.cv && tcv.dataset.uuid) {
+        var tstage = tcv.querySelector('.mg-stage');
+        crossBlockMove(st, tcv.dataset.uuid, selCards, tstage ? dropAt(ev, tstage, tcv) : null);
+        return;
+      }
+      if (zn && zn.dataset.mgMacroUuid && zn.dataset.mgMacroUuid !== srcUuid) { crossBlockMove(st, zn.dataset.mgMacroUuid, selCards); return; }
       var ddx = ev.clientX - sx, ddy = ev.clientY - sy;
       if (Math.abs(ddx) >= 5 || Math.abs(ddy) >= 5) {
         var sg = st.stage.getBoundingClientRect();
@@ -3677,15 +3700,71 @@ function setupCvCorner(cv) {
   var right = cv.querySelector('.mg-cv-right');
   if (right) right.addEventListener('mousedown', function (e) { beginResize(e, true, false); });
 }
-async function crossBlockMove(st, targetUuid) {
-  var sb = await getBlock(st.uuid); if (!sb) return;
-  var sRefs = findRefs(sb.content), si = -1, i;
-  for (i = 0; i < sRefs.length; i++) { if (normSrc(sRefs[i].src) === normSrc(st.src)) { si = i; break; } }
-  if (si < 0) return;
-  st.el.classList.add('mg-deleting');
-  var ref = sRefs[si];
-  await writeBlock(st.uuid, function (c) { var r = findRef(c, st.src); return r ? c.replace(r.exact, '').replace(/[ \t]{2,}/g, ' ') : c; });
-  await writeBlock(targetUuid, function (c) { return insertImgMd(c, ref.md); });
+function cardMoveSrcs(card) {
+  var arr = null;
+  if (card.kind === 'img' && card.images && card.images.length > 1) arr = card.images;
+  else if (card.kind === 'video' && card.videos && card.videos.length > 1) arr = card.videos;
+  else if (card.kind === 'pdf' && card.pdfs && card.pdfs.length > 1) arr = card.pdfs;
+  if (!arr) return card.src ? [card.src] : [];
+  var out = [];
+  arr.forEach(function (v) { var s = v.src || v.url; if (s && out.indexOf(s) < 0) out.push(s); });
+  return out.length ? out : (card.src ? [card.src] : []);
+}
+async function crossBlockMove(st, targetUuid, list, places) {
+  var cards = (list && list.length ? list.slice() : [st]).filter(function (c) {
+    return c && c.uuid && !c.lockBlock && c.uuid !== targetUuid;
+  });
+  if (!cards.length) return;
+  var placeByCard = {};
+  (places || []).forEach(function (p) { if (p && p.card) placeByCard[p.card] = p; });
+  var byBlock = {};
+  cards.forEach(function (c) { (byBlock[c.uuid] = byBlock[c.uuid] || []).push(c); });
+  var moved = [];
+  var uuids = Object.keys(byBlock);
+  for (var k = 0; k < uuids.length; k++) {
+    var group = byBlock[uuids[k]];
+    await writeBlock(uuids[k], function (c) {
+      group.forEach(function (card) {
+        var grp = (card.group && card.group !== '_legacy') ? card.group : '';
+        cardMoveSrcs(card).forEach(function (s) {
+          var r = findRef(c, s);
+          if (r) { c = c.replace(r.exact, ''); moved.push({ md: r.md, grp: grp, uuid: card.uuid, place: placeByCard[card] || null }); }
+        });
+        MG.sel.delete(card);
+        if (card.el) card.el.classList.add('mg-deleting');
+      });
+      return c.replace(/[ \t]{2,}/g, ' ');
+    });
+  }
+  if (!moved.length) return;
+  await writeBlock(targetUuid, function (c) {
+    var used = {}, n = 1;
+    refsAll(c).forEach(function (r) { if (r.mgm && r.mgm.grp) used[r.mgm.grp] = 1; });
+    function fresh() { while (used['g' + n]) n++; var id = 'g' + n; used[id] = 1; return id; }
+    var remap = {};
+    moved.forEach(function (m) {
+      var md = m.md, ng = '';
+      if (m.grp) {
+        var key = m.uuid + '|' + m.grp;
+        if (!remap[key]) {
+          if (used[m.grp]) remap[key] = fresh();
+          else { remap[key] = m.grp; used[m.grp] = 1; }
+        }
+        ng = remap[key];
+      }
+      if (m.place || (m.grp && ng !== m.grp)) {
+        md = refsRewrite(md, function (r) {
+          var mgm = Object.assign({}, r.mgm);
+          if (m.grp) mgm.grp = ng;
+          if (m.place) { mgm.c = m.place.c; mgm.r = m.place.r; mgm.cx = m.place.cx; mgm.cy = m.place.cy; }
+          r.mgm = mgm;
+          return r;
+        });
+      }
+      c = insertImgMd(c, md);
+    });
+    return c;
+  });
   schedScan();
 }
 async function deleteCards(arr) {
