@@ -153,6 +153,7 @@ body div[id="__app"] .ls-block table thead th{border-bottom:2px solid var(--mg-a
 .mg-pdf-page{display:block;margin:0 auto;max-width:100%;background:#fff}
 .mg-pdf-fallback{display:flex;align-items:center;justify-content:center;overflow:hidden}
 .mg-pdf-fallback::after{content:'PDF';font-size:18px;font-weight:700;color:rgba(200,60,60,.7);margin-top:auto;margin-bottom:auto}
+.mg-pdf-badge{position:absolute;right:18px;bottom:6px;z-index:6;background:rgba(0,0,0,.55);color:#fff;font-size:11px;line-height:1;padding:3px 6px;border-radius:4px;pointer-events:none;font-variant-numeric:tabular-nums}
 .mg-sheet{display:block;width:100%;height:calc(100% + ${CELL_T}px);overflow:auto;box-sizing:border-box;background:var(--ls-primary-background-color,var(--ls-secondary-background-color,#fff));color:var(--ls-primary-text-color,#333);cursor:default;position:relative}
 .mg-yt{display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;background:#000;position:relative}
 .mg-yt-head{display:flex;align-items:center;gap:6px;flex:0 0 auto;padding:2px 4px;flex-wrap:nowrap;overflow:hidden;background:var(--ls-tertiary-background-color,var(--ls-secondary-background-color,#eee));border-bottom:1px solid var(--ls-border-color,rgba(128,128,128,.2))}
@@ -1433,7 +1434,8 @@ async function pdfBuildPages(st) {
   var cw = wrap.clientWidth - 2; if (cw <= 0) cw = 400;
   var ar = 1.414;
   try { var pg = await doc.getPage(1); var v = pg.getViewport({ scale: 1 }); ar = v.height / v.width; } catch (e) {}
-  p.baseAR = ar; p.lastW = cw; p.slots = [];
+  p.baseAR = ar; p.lastW = cw; p.slots = []; p.total = 0; p.page = 0;
+  pdfUpdateBadge(st);
   for (var i = 0; i < doc.numPages; i++) {
     var slot = td().createElement('div'); slot.className = 'mg-pdf-slot';
     slot.dataset.page = String(i); slot.style.height = Math.round(cw * ar) + 'px';
@@ -1448,6 +1450,9 @@ async function pdfBuildPages(st) {
   }, { root: wrap, rootMargin: '200px' });
   p.slots.forEach(function (s) { p.pageObs.observe(s); });
   p.slots.forEach(function (s, i) { if (inViewport(s, wrap)) renderPdfPage(st, i); });
+  p.total = doc.numPages;
+  pdfUpdateBadge(st);
+  pdfResume(st);
 }
 async function renderPdfPage(st, idx) {
   var p = st.pdf;
@@ -1506,8 +1511,115 @@ function pdfFallback(st) {
   p.wrap.classList.add('mg-pdf-fallback');
   p.wrap.textContent = cardBaseName(st.src || st.url || '');
 }
+// Logseq (OG) keeps per-PDF viewer state in a sidecar EDN next to the asset:
+// assets/<basename>.edn, shaped {:highlights [...] :extra {:page N}}. The built-in
+// viewer restores its page from :extra and rewrites it (debounced) while reading,
+// so we read/write the same file to stay in sync. File access goes through the
+// host IPC channels (readFile/writeFile) with the fs fallbacks as a backup.
+var PDF_EDN_CACHE = {};
+function pdfEdnKey(src) {
+  var n = normSrc(src);
+  if (n.indexOf('assets/') !== 0) return '';
+  var b = cardBaseName(n).replace(/\.pdf$/i, '');
+  return b.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').replace(/[ .]+$/, '');
+}
+function pdfEdnParsePage(txt) {
+  var m = txt && txt.match(/:extra\s*\{([^}]*)\}/), mm = m && m[1].match(/:page\s+(-?\d+)/);
+  return mm ? parseInt(mm[1], 10) : 0;
+}
+async function pdfEdnReadRaw(file) {
+  try {
+    var r = await hostInvoke('readFile', [file]);
+    return (typeof r === 'string') ? r : null;
+  } catch (e) {
+    console.error('[mg] pdf edn: readFile via ipc failed:', (e && e.message) || e);
+    return null;
+  }
+}
+async function pdfEdnWriteRaw(gp, file, out) {
+  try {
+    await hostInvoke('writeFile', [gp, file, out]);
+    console.log('[mg] pdf edn: page saved via ipc');
+    return true;
+  } catch (e) {
+    console.error('[mg] pdf edn: writeFile via ipc failed:', (e && e.message) || e);
+    return false;
+  }
+}
+async function pdfEdnReadPage(src) {
+  var key = pdfEdnKey(src); if (!key) return 0;
+  if (key in PDF_EDN_CACHE) return PDF_EDN_CACHE[key];
+  var page = 0;
+  try {
+    var gp = await getGraphPath();
+    if (gp) page = pdfEdnParsePage(await pdfEdnReadRaw(gp.replace(/[\/\\]+$/, '') + '/assets/' + key + '.edn'));
+  } catch (e) {}
+  if (page > 0) PDF_EDN_CACHE[key] = page;
+  return page;
+}
+async function pdfEdnWritePage(src, page) {
+  var key = pdfEdnKey(src); if (!key || !(page > 0)) return;
+  PDF_EDN_CACHE[key] = page;
+  try {
+    var gp = await getGraphPath(); if (!gp) return;
+    var file = gp.replace(/[\/\\]+$/, '') + '/assets/' + key + '.edn';
+    var txt = await pdfEdnReadRaw(file);
+    var out;
+    if (!txt || !txt.trim()) out = '{:highlights [] :extra {:page ' + page + '}}\n';
+    else if (/:extra\s*\{[^}]*\}/.test(txt)) out = txt.replace(/:extra\s*\{([^}]*)\}/, function (m, inner) {
+      var rest = inner.replace(/:page\s+-?\d+/, '').replace(/^[,\s]+/, '').replace(/[,\s]+$/, '');
+      return ':extra {:page ' + page + (rest ? ', ' + rest : '') + '}';
+    });
+    else out = txt.replace(/\}(\s*)$/, ', :extra {:page ' + page + '}}$1');
+    if (out && out !== txt) await pdfEdnWriteRaw(gp, file, out);
+  } catch (e) { console.error('[mg] pdf edn write:', e.message || e); }
+}
+function pdfUpdateBadge(st) {
+  var p = st.pdf; if (!p || !p.badge) return;
+  if (!p.total) { p.badge.style.display = 'none'; return; }
+  var pg = Math.min(p.total, Math.max(1, p.page || 1));
+  p.badge.textContent = (LANG === 'de' ? 'S. ' : 'p. ') + pg + '/' + p.total;
+  p.badge.style.display = '';
+}
+function pdfTopPage(st) {
+  var p = st.pdf; if (!p || !p.slots || !p.slots.length) return 1;
+  var top0 = p.wrap.scrollTop + 4, idx = 0;
+  for (var i = 0; i < p.slots.length; i++) {
+    var s = p.slots[i]; idx = i;
+    if (s.offsetTop + s.offsetHeight > top0) break;
+  }
+  return idx + 1;
+}
+function pdfOnScroll(st) {
+  var p = st.pdf; if (!p || p.destroyed || p.scrollWait) return;
+  p.scrollWait = setTimeout(function () {
+    p.scrollWait = 0;
+    if (p.destroyed || !p.slots || !p.wrap.isConnected) return;
+    var idx = pdfTopPage(st);
+    if (idx !== p.page) {
+      p.page = idx; pdfUpdateBadge(st);
+      var k = pdfEdnKey(st.src); if (k) PDF_EDN_CACHE[k] = idx;
+    }
+    clearTimeout(p.ednTimer);
+    p.ednTimer = setTimeout(function () { pdfEdnWritePage(st.src, p.page || 1); }, 1500);
+  }, 120);
+}
+async function pdfResume(st) {
+  var p = st.pdf; if (!p || p.destroyed || !p.slots) return;
+  var pg = await pdfEdnReadPage(st.src);
+  if (p.destroyed || !p.slots || !p.wrap.isConnected) return;
+  pg = Math.min(p.slots.length, Math.max(1, pg || 1));
+  p.page = pg;
+  if (pg > 1) { var slot = p.slots[pg - 1]; if (slot) { try { p.wrap.scrollTop = Math.max(0, slot.offsetTop - 2); } catch (e) {} } }
+  pdfUpdateBadge(st);
+}
 function setupPdfCard(st) {
   var p = st.pdf;
+  if (!p.badge) {
+    var b = td().createElement('div'); b.className = 'mg-pdf-badge'; b.style.display = 'none';
+    st.el.appendChild(b); p.badge = b;
+  }
+  if (!p.scrollFn) { p.scrollFn = function () { pdfOnScroll(st); }; p.wrap.addEventListener('scroll', p.scrollFn); }
   MG.pdfCards.set(st.el, st);
   try { pdfObserver().observe(st.el); } catch (e) {}
   try { p.ro = new (top.ResizeObserver || ResizeObserver)(function () { pdfScheduleResize(st); }); p.ro.observe(st.el); } catch (e) {}
@@ -1529,6 +1641,10 @@ function destroyCard(st) {
   try { if (p.pageObs) p.pageObs.disconnect(); } catch (e) {}
   try { if (p.ro) p.ro.disconnect(); } catch (e) {}
   clearTimeout(p.rt);
+  clearTimeout(p.ednTimer);
+  clearTimeout(p.scrollWait);
+  try { if (p.scrollFn && p.wrap) p.wrap.removeEventListener('scroll', p.scrollFn); } catch (e) {}
+  p.scrollFn = null;
   try { if (p.doc) p.doc.destroy(); } catch (e) {}
   p.doc = null;
 }
@@ -3082,7 +3198,8 @@ function pdfActivatePdf(st, idx) {
   var v = st.pdfs[idx], p = st.pdf;
   if (p.doc) { try { p.doc.destroy(); } catch (e) {} p.doc = null; }
   if (p.pageObs) { try { p.pageObs.disconnect(); } catch (e) {} p.pageObs = null; }
-  p.slots = null;
+  p.slots = null; p.total = 0; p.page = 0;
+  pdfUpdateBadge(st);
   try { p.wrap.textContent = ''; } catch (e) {}
   st.src = v.src; st.url = v.url;
   try { st.el.dataset.src = st.src; } catch (e) {}
