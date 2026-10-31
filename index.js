@@ -442,8 +442,6 @@ function unlinkFile(vp, path) { try { if (top.apis && top.apis.doAction) { top.a
 function showInFinder(full) {
   try { if (top.apis && top.apis.doAction) { top.apis.doAction(['openFileInFolder', full]); return; } } catch (e) { console.error('[mg] finder apis.doAction:', e.message || e); }
   try { if (logseq && logseq.App && typeof logseq.App.invokeExternalCommand === 'function') { logseq.App.invokeExternalCommand('logseq.editor/open-file-in-directory', full); return; } } catch (e) { console.error('[mg] finder invokeExternalCommand:', e.message || e); }
-  try { if (top.require) { var sh = top.require('@electron/remote').shell; if (sh && sh.showItemInFolder) { sh.showItemInFolder(full); return; } } } catch (e) { console.error('[mg] finder electron remote:', e.message || e); }
-  try { top.require('child_process').execFile('open', ['-R', String(full)]); return; } catch (e) { console.error('[mg] finder open -R:', e.message || e); }
   try { navigator.clipboard.writeText(full); } catch (e) {}
   toast(t('path_copied') + full);
 }
@@ -469,8 +467,6 @@ function bytesToBlob(bytes, name) { return new Blob([bytes], { type: mimeOf(name
 async function readAssetBytes(name) {
   var dir = (await getGraphPath() || MG.graphPath || '').replace(/[\/\\]+$/, '');
   if (!dir || !name) return null;
-  var fs = acquireFs();
-  if (fs) { try { return new Uint8Array(fs.readFileSync(dir + '/assets/' + name)); } catch (e) {} }
   return await pdfFetchBytes('file://' + (dir + '/assets/' + name).split('/').map(encodeURIComponent).join('/'));
 }
 function loadImg(url) { return new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function (e) { rej(e); }; im.src = url; }); }
@@ -488,14 +484,6 @@ function applyPop(card) {
       return;
     }
   }
-}
-function acquireFs() {
-  function att(fn, tag) { try { var r = fn(); if (r && r.writeFileSync) return r; } catch (e) { console.error('[mg] fs acq ' + tag + ':', e.message || e); } return null; }
-  return att(function () { return top.require('fs'); }, 'top.fs')
-    || att(function () { var em = top.require('electron'); return em && em.remote && em.remote.require('fs'); }, 'electron.remote.fs')
-    || att(function () { return top.process && top.process.mainModule && top.process.mainModule.require('fs'); }, 'mainModule.fs')
-    || att(function () { return top.eval("require('fs')"); }, 'eval.fs')
-    || att(function () { return top.remote && top.remote.require('fs'); }, 'top.remote.fs');
 }
 function hostInvoke(chan, argsArr) {
   var ap = null;
@@ -531,15 +519,6 @@ async function saveAsset(filename, file) {
       } catch (e2) { lastErr = 'writeFile:' + ((e2 && (e2.message || e2)) || e2); console.error(lastErr); }
     } else if (!lastErr) lastErr = 'empty file';
   } catch (e) { lastErr = 'ipc:' + (e.message || e); console.error('[mg] saveAsset attempt ipc writeFile:', e.message || e); }
-  try {
-    var g2 = await logseq.App.getCurrentGraph(); if (!g2 || !g2.path) throw new Error('no graph');
-    var fs = acquireFs(), pm = top.require('path');
-    if (!fs) throw new Error('fs unavailable');
-    var dir2 = pm.join(g2.path, 'assets');
-    if (!fs.existsSync(dir2)) fs.mkdirSync(dir2, { recursive: true });
-    fs.writeFileSync(pm.join(dir2, filename), bytes || new Uint8Array(await readFileAs(file, false)));
-    return true;
-  } catch (e) { lastErr = 'fs:' + (e.message || e); console.error('[mg] saveAsset attempt fs-write:', e.message || e); }
   saveAsset.lastErr = lastErr;
   return false;
 }
@@ -1368,8 +1347,6 @@ async function loadPdfBytes(st) {
   var vp = await getGraphPath();
   var dir = (vp || MG.graphPath || '').replace(/[\/\\]+$/, '');
   if (!dir) return null;
-  var fs = acquireFs();
-  if (fs) { try { return new Uint8Array(fs.readFileSync(dir + '/assets/' + base)); } catch (e) {} }
   var abs = dir + '/assets/' + base;
   return await pdfFetchBytes('file://' + abs.split('/').map(encodeURIComponent).join('/'));
 }
@@ -2629,14 +2606,7 @@ async function sheetRestoreMd(st) {
 }
 async function openSheetCard(st) {
   try { if (st.native && st.native.tagName !== 'IMG' && st.native.click) { st.native.click(); return; } } catch (e) {}
-  try {
-    var vp = await getGraphPath();
-    if (vp) {
-      var abs = vp.replace(/[\/\\]+$/, '') + '/assets/' + cardBaseName(st.src || st.url || '');
-      try { if (top.shell && top.shell.openPath) { top.shell.openPath(abs); return; } } catch (e2) {}
-      try { if (top.require) { var sh = top.require('electron').shell; if (sh && sh.openPath) { sh.openPath(abs); return; } } } catch (e3) {}
-    }
-  } catch (e4) {}
+  if (await openAssetExternal(st)) return;
   toast(t('open_pdf_failed'));
 }
 
@@ -2904,24 +2874,15 @@ function ytCacheTitle(yid, title) {
 function ytFetchTitle(yid) {
   return new Promise(function (resolve) {
     var url = 'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=' + encodeURIComponent(yid) + '&format=json';
-    try {
-      var https = top.require('https');
-      var req = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, function (res) {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          https.get(res.headers.location, function (r2) { var b = ''; r2.on('data', function (c) { b += c; }); r2.on('end', function () { try { resolve(JSON.parse(b).title || ''); } catch (e) { resolve(''); } }); }).on('error', function () { resolve(''); });
-          return;
-        }
-        var data = '';
-        res.on('data', function (c) { data += c; });
-        res.on('end', function () { try { resolve(JSON.parse(data).title || ''); } catch (e) { resolve(''); } });
-      });
-      req.on('error', function () { resolve(''); });
-      req.setTimeout(8000, function () { try { req.destroy(); } catch (e) {} resolve(''); });
-      return;
-    } catch (e) {}
-    try {
-      fetch(url).then(function (r) { return r.json(); }).then(function (d) { resolve((d && d.title) || ''); }).catch(function () { resolve(''); });
-    } catch (e) { resolve(''); }
+    (async function () {
+      try {
+        var d = await hostInvoke('httpFetchJSON', [url]);
+        if (d && d.title) { resolve(d.title); return; }
+      } catch (e) {}
+      try {
+        fetch(url).then(function (r) { return r.json(); }).then(function (d2) { resolve((d2 && d2.title) || ''); }).catch(function () { resolve(''); });
+      } catch (e) { resolve(''); }
+    })();
   });
 }
 function ytRenderTabs(st) {
@@ -3843,7 +3804,31 @@ function setupCvCorner(cv) {
   var stage = cv.querySelector('.mg-stage');
   var corner = cv.querySelector('.mg-cv-corner');
   if (!corner) return;
-  if (blk) { cv.style.maxWidth = blk.clientWidth + 'px'; if (!cv.style.width) cv.style.width = '100%'; }
+  function cvMaxW() {
+    if (!blk) return 9999;
+    try {
+      var avail = Math.floor(blk.getBoundingClientRect().right - cv.getBoundingClientRect().left - 2);
+      return Math.max(CANVAS_MIN_PX, avail > 0 ? avail : blk.clientWidth);
+    } catch (e) { return blk.clientWidth; }
+  }
+  // Resting width cap: blk.clientWidth alone ignores the block indent (bullet
+  // column) that cv carries as marginLeft, so the canvas could end up with its
+  // right edge past the logseq field edge. Clamp against the live right edge.
+  cv.style.maxWidth = cvMaxW() + 'px';
+  if (!cv.style.width) cv.style.width = '100%';
+  if (!MG.cvResizeHooked) {
+    MG.cvResizeHooked = true;
+    var win0 = td().defaultView || top;
+    win0.addEventListener('resize', function () {
+      td().querySelectorAll('.mg-canvas').forEach(function (x) {
+        try {
+          var b = x.parentElement; if (!b) return;
+          var a = Math.floor(b.getBoundingClientRect().right - x.getBoundingClientRect().left - 2);
+          if (a > 0) x.style.maxWidth = Math.max(CANVAS_MIN_PX, a) + 'px';
+        } catch (e) {}
+      });
+    });
+  }
   function beginResize(e, hor, ver) {
     if (e.button !== 0) return;
     e.preventDefault(); e.stopPropagation();
@@ -3851,7 +3836,8 @@ function setupCvCorner(cv) {
     stage.classList.add('mg-grid-visible');
     stage.style.setProperty('--mg-cell-size', CELL_PX + 'px');
     var d = td(), sx = e.clientX, sy = e.clientY, sw = cv.offsetWidth, sh = cv.offsetHeight;
-    var maxWVal = blk ? blk.clientWidth : 9999;
+    var maxWVal = cvMaxW();
+    cv.style.maxWidth = maxWVal + 'px';
     var ratio = sw / sh;
     var minCW = CANVAS_MIN_PX, minCH = CANVAS_MIN_PX;
     var curW = sw, curH = sh;
@@ -4513,29 +4499,24 @@ function askConfirm(msg, danger) {
     shield.onclick = function () { finish(false); };
   });
 }
-async function openPdfCard(st) {
-  try { if (st.native && st.native.tagName !== 'IMG' && st.native.click) { st.native.click(); return; } } catch (e) {}
+async function openAssetExternal(st) {
   try {
     var vp = await getGraphPath();
     if (vp) {
       var abs = vp.replace(/[\/\\]+$/, '') + '/assets/' + cardBaseName(st.src || st.url || '');
-      try { if (top.open) { top.open('file://' + abs); return; } } catch (e2) {}
-      try { if (top.shell && top.shell.openPath) { top.shell.openPath(abs); return; } } catch (e3) {}
-      try { if (top.require) { var sh = top.require('electron').shell; if (sh && sh.openPath) { sh.openPath(abs); return; } } } catch (e4) {}
+      try { if (top.apis && top.apis.openPath) { await top.apis.openPath(abs); return true; } } catch (e2) {}
+      try { if (top.open) { top.open('file://' + abs); return true; } } catch (e3) {}
     }
-  } catch (e5) {}
+  } catch (e4) {}
+  return false;
+}
+async function openPdfCard(st) {
+  try { if (st.native && st.native.tagName !== 'IMG' && st.native.click) { st.native.click(); return; } } catch (e) {}
+  if (await openAssetExternal(st)) return;
   toast(t('open_pdf_failed'));
 }
 async function openVideoCard(st) {
-  try {
-    var vp = await getGraphPath();
-    if (vp) {
-      var abs = vp.replace(/[\/\\]+$/, '') + '/assets/' + cardBaseName(st.src || st.url || '');
-      try { if (top.shell && top.shell.openPath) { top.shell.openPath(abs); return; } } catch (e3) {}
-      try { if (top.require) { var sh = top.require('electron').shell; if (sh && sh.openPath) { sh.openPath(abs); return; } } } catch (e4) {}
-      try { if (top.open) { top.open('file://' + abs); return; } } catch (e2) {}
-    }
-  } catch (e5) {}
+  if (await openAssetExternal(st)) return;
   toast(t('open_video_failed'));
 }
 function menuItems(st) {
